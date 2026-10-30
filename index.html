@@ -97,7 +97,6 @@
     <button data-preset="prior">Prior only</button>
     <button data-preset="reveal">One measurement</button>
     <button data-preset="band">Several measurements</button>
-    <button data-preset="quiz2">What if 10k scored 45?</button>
     <button id="reset">Clear measurements</button>
     <label><input type="checkbox" id="showReal"> Show real curve</label>
     <label><input type="checkbox" id="showPrior" checked> Show prior</label>
@@ -118,10 +117,10 @@
     <div class="card">
       <h2>Try it</h2>
       <ul>
-        <li>Click the chart to run an experiment at that dataset size: the real measured score appears.</li>
-        <li>Drag a measurement up or down to ask "what if it had scored this?" Watch what the band does, and what it doesn't.</li>
-        <li>Double-click a measurement to remove it.</li>
+        <li>Click the chart to run an experiment at that dataset size: the real measured score appears. Try one where the band is widest, and watch it shrink.</li>
         <li>Hover to see the prediction at any size. With one measurement, the tooltip shows the rule: expected + similarity × surprise.</li>
+        <li>Double-click a measurement to remove it.</li>
+        <li>After the quiz: drag a measurement up or down to ask "what if it had scored this?"</li>
       </ul>
     </div>
   </div>
@@ -545,7 +544,7 @@
     document.documentElement.setAttribute("data-theme", "light");
     applyPreset(shot);
   } else {
-    applyPreset("reveal");
+    applyPreset("band");   // matches slide 8, where the lesson sends learners here
   }
 })();
 </script>
