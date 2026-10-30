@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predicting Translation Quality</title>
+<meta name="description" content="Interactive Gaussian process demo: predict a translation model's quality at a dataset size you have not trained on, with an uncertainty band.">
+<style>
+  :root {
+    --navy: #000F46;
+    --navy-dark: #000B34;
+    --sky: #46C8F0;
+    --red: #FF2D3C;
+    --yellow: #FFD629;
+    --grey: #C8C8C8;
+    --bg: #ffffff;
+    --panel: #f4f6fa;
+    --ink: #10162f;
+    --muted: #4d5470;
+    --grid: #e3e6ee;
+    --mean: #000F46;
+    --band: rgba(70, 200, 240, 0.32);
+    --prior-band: rgba(200, 200, 200, 0.45);
+    --prior-line: #6b7190;
+    --point-stroke: #000F46;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000B34;
+      --panel: #0b1a4f;
+      --ink: #eef1fa;
+      --muted: #aab3d4;
+      --grid: #1d2b63;
+      --mean: #ffffff;
+      --band: rgba(70, 200, 240, 0.35);
+      --prior-band: rgba(200, 200, 200, 0.18);
+      --prior-line: #aab3d4;
+      --point-stroke: #ffffff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #000B34;
+    --panel: #0b1a4f;
+    --ink: #eef1fa;
+    --muted: #aab3d4;
+    --grid: #1d2b63;
+    --mean: #ffffff;
+    --band: rgba(70, 200, 240, 0.35);
+    --prior-band: rgba(200, 200, 200, 0.18);
+    --prior-line: #aab3d4;
+    --point-stroke: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { background: var(--navy); color: #fff; padding: 20px 16px; }
+  header h1 { margin: 0 auto; max-width: 1000px; font-size: 1.5rem; font-weight: 650; }
+  header p { margin: 4px auto 0; max-width: 1000px; color: #cdd3ea; }
+  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
+  .controls button {
+    font: inherit; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px;
+    border: 1px solid var(--muted); background: var(--bg); color: var(--ink); cursor: pointer;
+  }
+  .controls button:hover, .controls button[aria-pressed="true"] { background: var(--navy); border-color: var(--sky); color: #fff; }
+  .controls label { font-size: 0.9rem; display: inline-flex; gap: 6px; align-items: center; }
+  .chart-wrap { position: relative; background: var(--bg); touch-action: none; }
+  svg { display: block; width: 100%; height: auto; user-select: none; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--grid); border-radius: 6px; padding: 6px 10px; font-size: 0.85rem;
+    white-space: nowrap; display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .tooltip .rule { color: var(--muted); }
+  .readout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 700px) { .readout { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border-radius: 8px; padding: 12px 16px; }
+  .card h2 { font-size: 1rem; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  .card ul { margin: 0; padding-left: 20px; }
+  footer { max-width: 1000px; margin: 0 auto; padding: 8px 16px 24px; color: var(--muted); font-size: 0.8rem; }
+  footer a { color: inherit; }
+  /* screenshot mode: plot only */
+  body.shot header, body.shot .controls, body.shot .readout, body.shot footer { display: none; }
+  body.shot main { max-width: none; padding: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Predicting translation quality with a Gaussian process</h1>
+  <p>Indonesian → English translation: how good will the model be with more training data, and how sure can we be?</p>
+</header>
+<main>
+  <div class="controls" id="controls">
+    <button data-preset="prior">Prior only</button>
+    <button data-preset="reveal">One measurement</button>
+    <button data-preset="band">Several measurements</button>
+    <button data-preset="quiz2">What if 10k scored 45?</button>
+    <button id="reset">Clear measurements</button>
+    <label><input type="checkbox" id="showReal"> Show real curve</label>
+    <label><input type="checkbox" id="showPrior" checked> Show prior</label>
+    <label>Similarity reach
+      <input type="range" id="ell" min="0.4" max="3" step="0.01">
+      <span id="ellOut"></span>
+    </label>
+  </div>
+  <div class="chart-wrap" id="wrap">
+    <svg id="chart" role="img" aria-label="Gaussian process prediction of translation quality against training set size"></svg>
+    <div class="tooltip" id="tip"></div>
+  </div>
+  <div class="readout">
+    <div class="card">
+      <h2>Predictions</h2>
+      <table id="table"></table>
+    </div>
+    <div class="card">
+      <h2>Try it</h2>
+      <ul>
+        <li>Click the chart to run an experiment at that dataset size: the real measured score appears.</li>
+        <li>Drag a measurement up or down to ask "what if it had scored this?" Watch what the band does, and what it doesn't.</li>
+        <li>Double-click a measurement to remove it.</li>
+        <li>Hover to see the prediction at any size. With one measurement, the tooltip shows the rule: expected + similarity × surprise.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+<footer>
+  Data: mBART-50 fine-tuned on Indonesian→English, ChrF score against training sentence pairs
+  (<a href="https://github.com/vschram/ZeroShot_for_PSL">source</a>).
+  Prior: trend 50 at 10k pairs, +6 per tenfold, ±5 (one standard deviation).
+  Kernel: squared exponential on log<sub>10</sub>(pairs). Measurements are treated as noise-free.
+</footer>
+
+<script>
+(() => {
+  // Real mBART-50 Indonesian→English ChrF learning curve.
+  const REAL = [
+    [100, 24.61], [200, 36.2], [500, 44.56], [1000, 48.14], [2000, 49.01],
+    [5000, 51.78], [10000, 53.36], [20000, 54.57], [50000, 56.31],
+    [100000, 57.72], [200000, 59.2], [500000, 60.49], [1000000, 61.22],
+  ];
+  const SIGMA = 5;                                   // prior standard deviation
+  const ELL_DEFAULT = 1 / Math.sqrt(2 * Math.log(1 / 0.8)); // similarity 0.8 at one decade
+  const X_MIN = 2, X_MAX = 6;
+  let Y_MIN = 20, Y_MAX = 75;
+
+  const priorMean = x => 50 + 6 * (x - 4);
+  const lg = n => Math.log10(n);
+  const fmtSize = n => n >= 1e6 ? (n / 1e6) + "M" : n >= 1e3 ? (n / 1e3) + "k" : String(n);
+  const fmtX = x => {
+    const n = Math.pow(10, x);
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, "") + "k";
+    return Math.round(n).toString();
+  };
+  const realAt = x => { const r = REAL.find(([n]) => Math.abs(lg(n) - x) < 1e-9); return r ? r[1] : null; };
+
+  const state = {
+    ell: ELL_DEFAULT,
+    meas: [],            // {x, y}
+    showReal: false,
+    showPrior: true,
+    showPost: true,
+    preset: null,
+  };
+
+  // ---------- Gaussian process ----------
+  const sim = (a, b, ell) => Math.exp(-((a - b) ** 2) / (2 * ell * ell));
+  function posterior(meas, ell) {
+    const n = meas.length;
+    if (!n) return x => ({ mean: priorMean(x), sd: SIGMA });
+    const K = meas.map(a => meas.map(b => SIGMA * SIGMA * sim(a.x, b.x, ell)));
+    for (let i = 0; i < n; i++) K[i][i] += 1e-8;
+    const L = K.map(r => r.map(() => 0));
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j <= i; j++) {
+        let s = K[i][j];
+        for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
+        L[i][j] = i === j ? Math.sqrt(Math.max(s, 1e-12)) : s / L[j][j];
+      }
+    }
+    const fwd = b => { const z = []; for (let i = 0; i < n; i++) { let s = b[i]; for (let k = 0; k < i; k++) s -= L[i][k] * z[k]; z.push(s / L[i][i]); } return z; };
+    const bwd = z => { const a = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = z[i]; for (let k = i + 1; k < n; k++) s -= L[k][i] * a[k]; a[i] = s / L[i][i]; } return a; };
+    const alpha = bwd(fwd(meas.map(m => m.y - priorMean(m.x))));
+    return x => {
+      const ks = meas.map(m => SIGMA * SIGMA * sim(x, m.x, ell));
+      const v = fwd(ks);
+      const mean = priorMean(x) + ks.reduce((s, k, i) => s + k * alpha[i], 0);
+      const varr = SIGMA * SIGMA - v.reduce((s, vi) => s + vi * vi, 0);
+      return { mean, sd: Math.sqrt(Math.max(varr, 0)) };
+    };
+  }
+
+  // ---------- presets (slide frames) ----------
+  const PRESETS = {
+    decision: { meas: [4], showPrior: false, showPost: false, notes: ["decision"] },
+    prior:    { meas: [], showPrior: true, showPost: false, notes: ["prior"] },
+    kernel:   { meas: [4], kernelOnly: true },
+    rule:     { meas: [4], showPrior: true, showPost: false, notes: ["surprise", "unknown100k"] },
+    reveal:   { meas: [4], showPrior: true, showPost: true, notes: ["predict100k", "real100k"] },
+    band:     { meas: [lg(500), lg(2000), 4], showPrior: false, showPost: true, notes: ["bandNarrow", "bandWide"] },
+    quiz1:    { meas: [3, 4], showPrior: false, showPost: true, notes: ["sd5k", "sd1M"] },
+    quiz2:    { meas: [4], showPrior: false, showPost: true, whatIf: 45, notes: ["twoPredictions"] },
+  };
+  function applyPreset(name) {
+    const p = PRESETS[name];
+    if (!p) return;
+    state.preset = name;
+    state.ell = ELL_DEFAULT;
+    state.meas = p.meas.map(x => ({ x, y: realAt(x) }));
+    state.showPrior = p.showPrior ?? true;
+    state.showPost = p.showPost ?? true;
+    state.showReal = false;
+    syncControls();
+    render();
+  }
+
+  // ---------- layout ----------
+  const params = new URLSearchParams(location.search);
+  const shot = params.get("shot");
+  if (shot) { Y_MIN = 35; Y_MAX = 70; }
+  const narrow = !shot && window.innerWidth < 640;   // phones: smaller canvas so text stays legible
+  const W = shot ? +(params.get("w") || 1600) : narrow ? 480 : 960;
+  const H = shot ? +(params.get("h") || 760) : narrow ? 400 : 540;
+  const FS = shot ? 30 : 15;                         // base font size in SVG units
+  const M = shot ? { l: 120, r: 60, t: 40, b: 105 } : narrow ? { l: 52, r: 16, t: 20, b: 58 } : { l: 64, r: 28, t: 20, b: 58 };
+  const XLABEL = narrow ? "Training sentence pairs (log scale)" : "Training sentence pairs (log scale: each step is ten times more data)";
+  const svg = document.getElementById("chart");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const PW = W - M.l - M.r, PH = H - M.t - M.b;
+  const sx = x => M.l + (x - X_MIN) / (X_MAX - X_MIN) * PW;
+  const sy = y => M.t + (Y_MAX - y) / (Y_MAX - Y_MIN) * PH;
+  const ix = px => X_MIN + (px - M.l) / PW * (X_MAX - X_MIN);
+  const iy = py => Y_MAX - (py - M.t) / PH * (Y_MAX - Y_MIN);
+
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent = svg) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    parent.appendChild(e);
+    return e;
+  };
+  const text = (x, y, s, attrs = {}) => {
+    const t = el("text", { x, y, fill: "var(--ink)", "font-size": FS, ...attrs });
+    t.textContent = s;
+    return t;
+  };
+
+  function axes(yLabel, yTicks, yFmt) {
+    const g = el("g", {});
+    for (const y of yTicks) {
+      el("line", { x1: M.l, x2: M.l + PW, y1: sy(y), y2: sy(y), stroke: "var(--grid)", "stroke-width": 1 }, g);
+      text(M.l - 12, sy(y) + FS * 0.35, yFmt(y), { "text-anchor": "end", fill: "var(--muted)" });
+    }
+    for (let x = X_MIN; x <= X_MAX; x++) {
+      el("line", { x1: sx(x), x2: sx(x), y1: M.t, y2: M.t + PH, stroke: "var(--grid)", "stroke-width": 1 }, g);
+      text(sx(x), M.t + PH + FS * 1.3, fmtSize(Math.pow(10, x)), { "text-anchor": "middle", fill: "var(--muted)" });
+    }
+    text(M.l + PW / 2, H - FS * 0.6, XLABEL, { "text-anchor": "middle", fill: "var(--muted)" });
+    const yl = text(0, 0, yLabel, { "text-anchor": "middle", fill: "var(--muted)" });
+    yl.setAttribute("transform", `translate(${FS * 1.0},${M.t + PH / 2}) rotate(-90)`);
+  }
+
+  const GRID = Array.from({ length: 241 }, (_, i) => X_MIN + i * (X_MAX - X_MIN) / 240);
+
+  function bandPath(f, k = 1) {
+    const top = GRID.map(x => { const p = f(x); return [sx(x), sy(p.mean + k * p.sd)]; });
+    const bot = GRID.map(x => { const p = f(x); return [sx(x), sy(p.mean - k * p.sd)]; }).reverse();
+    return "M" + top.concat(bot).map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join("L") + "Z";
+  }
+  const linePath = g => "M" + GRID.map(x => `${sx(x).toFixed(1)},${sy(g(x)).toFixed(1)}`).join("L");
+
+  function label(x, y, lines, opts = {}) {
+    const anchor = opts.anchor || "start";
+    const t = text(x, y, "", { "text-anchor": anchor, "font-weight": opts.bold ? 650 : 400, fill: opts.fill || "var(--ink)",
+      stroke: "var(--bg)", "stroke-width": shot ? 8 : 5, "paint-order": "stroke", "stroke-linejoin": "round" });
+    lines.forEach((s, i) => { const ts = el("tspan", { x, dy: i ? FS * 1.2 : 0 }, t); ts.textContent = s; });
+    return t;
+  }
+
+  function errorBar(x, mean, sd, color) {
+    const cap = shot ? 14 : 8;
+    el("line", { x1: sx(x), x2: sx(x), y1: sy(mean - sd), y2: sy(mean + sd), stroke: color, "stroke-width": shot ? 4 : 2.5 });
+    for (const y of [mean - sd, mean + sd]) el("line", { x1: sx(x) - cap, x2: sx(x) + cap, y1: sy(y), y2: sy(y), stroke: color, "stroke-width": shot ? 4 : 2.5 });
+    el("circle", { cx: sx(x), cy: sy(mean), r: shot ? 9 : 6, fill: color, stroke: "var(--bg)", "stroke-width": 2 });
+  }
+  function diamond(x, y, color) {
+    const r = shot ? 13 : 8, cx = sx(x), cy = sy(y);
+    el("path", { d: `M${cx},${cy - r}L${cx + r},${cy}L${cx},${cy + r}L${cx - r},${cy}Z`, fill: color, stroke: "var(--bg)", "stroke-width": 2 });
+  }
+
+  // ---------- render ----------
+  let f = posterior(state.meas, state.ell);
+  function render() {
+    svg.replaceChildren();
+    const p = PRESETS[state.preset] || {};
+    if (shot && p.kernelOnly) return renderKernel();
+    f = posterior(state.meas, state.ell);
+    axes("Translation quality (ChrF)", [20, 30, 40, 50, 60, 70].filter(y => y >= Y_MIN && y <= Y_MAX), y => y);
+    const defs = el("defs", {});
+    el("rect", { x: M.l, y: M.t, width: PW, height: PH }, el("clipPath", { id: "plotclip" }, defs));
+    const plot = el("g", { "clip-path": "url(#plotclip)" });
+
+    if (state.showPrior) {
+      el("path", { d: bandPath(x => ({ mean: priorMean(x), sd: SIGMA })), fill: "var(--prior-band)"  }, plot);
+      el("path", { d: linePath(priorMean), fill: "none", stroke: "var(--prior-line)", "stroke-width": shot ? 3 : 2, "stroke-dasharray": shot ? "12 8" : "7 5"  }, plot);
+    }
+    if (p.whatIf != null && state.showPost) {
+      const g = posterior([{ x: 4, y: p.whatIf }], state.ell);
+      el("path", { d: bandPath(g), fill: "rgba(255, 45, 60, 0.16)"  }, plot);
+      el("path", { d: linePath(x => g(x).mean), fill: "none", stroke: "var(--red)", "stroke-width": shot ? 4 : 2.5, "stroke-dasharray": shot ? "12 8" : "7 5"  }, plot);
+    }
+    if (state.showPost && state.meas.length) {
+      el("path", { d: bandPath(f), fill: "var(--band)"  }, plot);
+      el("path", { d: linePath(x => f(x).mean), fill: "none", stroke: "var(--mean)", "stroke-width": shot ? 4 : 2.5  }, plot);
+    }
+    if (state.showReal) {
+      el("path", { d: "M" + REAL.map(([n, y]) => `${sx(lg(n))},${sy(y)}`).join("L"), fill: "none", stroke: "var(--red)", "stroke-width": 1.5, "stroke-dasharray": "3 4"  }, plot);
+      for (const [n, y] of REAL) el("circle", { cx: sx(lg(n)), cy: sy(y), r: 3.5, fill: "var(--red)"  }, plot);
+    }
+
+    for (const n of p.notes || []) notes[n] && notes[n](p);
+
+    state.meas.forEach((m, i) => {
+      const edited = realAt(m.x) == null || Math.abs(realAt(m.x) - m.y) > 0.05;
+      const c = el("circle", {
+        cx: sx(m.x), cy: sy(m.y), r: shot ? 13 : 8,
+        fill: edited ? "var(--bg)" : "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": shot ? 4 : 2.5,
+        style: shot ? "" : "cursor: ns-resize",
+      });
+      c.dataset.idx = i;
+    });
+    drawLegend();
+    if (!shot) { renderTable(); document.querySelectorAll("[data-preset]").forEach(b => b.setAttribute("aria-pressed", b.dataset.preset === state.preset)); }
+  }
+
+  function drawLegend() {
+    const k = shot ? 1.8 : 1;
+    const items = [];
+    if (state.meas.length) items.push(["point", "Measurement"]);
+    if (state.showPost && state.meas.length) items.push(["line", "Prediction ± 1 sd"]);
+    if (state.showPrior) items.push(["dash", narrow ? "Prior" : "Prior (before measuring)"]);
+    if (state.showReal) items.push(["real", "Real curve"]);
+    let x = M.l + 12 * k;
+    const y = M.t + 18 * k;
+    for (const [kind, s] of items) {
+      if (kind === "point") el("circle", { cx: x + 8 * k, cy: y - 5 * k, r: 6 * k, fill: "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": 2 * k });
+      if (kind === "line") { el("rect", { x, y: y - 12 * k, width: 18 * k, height: 14 * k, fill: "var(--band)" }); el("line", { x1: x, x2: x + 18 * k, y1: y - 5 * k, y2: y - 5 * k, stroke: "var(--mean)", "stroke-width": 2.5 * k }); }
+      if (kind === "dash") { el("rect", { x, y: y - 12 * k, width: 18 * k, height: 14 * k, fill: "var(--prior-band)" }); el("line", { x1: x, x2: x + 18 * k, y1: y - 5 * k, y2: y - 5 * k, stroke: "var(--prior-line)", "stroke-width": 2 * k, "stroke-dasharray": `${4 * k} ${3 * k}` }); }
+      if (kind === "real") el("circle", { cx: x + 8 * k, cy: y - 5 * k, r: 3.5 * k, fill: "var(--red)" });
+      const t = text(x + 24 * k, y, s, { "font-size": 13 * k, fill: "var(--muted)" });
+      x += (30 + 14) * k + t.getComputedTextLength();
+    }
+  }
+
+  // Annotation layers for the slide frames.
+  const notes = {
+    decision() {
+      label(sx(4) - 22, sy(53.36) - 26, ["10k pairs: 53.4"], { anchor: "end", bold: true });
+      text(sx(5), sy(56) + FS * 0.35, "?", { "text-anchor": "middle", "font-size": FS * 2.4, "font-weight": 700, fill: "var(--mean)" });
+      label(sx(5), sy(56) + FS * 2.6, ["100k pairs?"], { anchor: "middle" });
+    },
+    prior() {
+      for (const x of [4, 5]) {
+        el("line", { x1: sx(x), x2: sx(x), y1: sy(priorMean(x) - SIGMA), y2: sy(priorMean(x) + SIGMA), stroke: "var(--prior-line)", "stroke-width": 3 });
+      }
+      label(sx(4) + 18, sy(priorMean(4) - SIGMA) + FS * 1.3, ["expected 50 ± 5"], { bold: true });
+      label(sx(5) + 18, sy(priorMean(5) - SIGMA) + FS * 1.3, ["expected 56 ± 5"], { bold: true });
+    },
+    surprise() {
+      addArrowMarker();
+      const x = sx(4);
+      el("line", { x1: x, x2: x, y1: sy(50), y2: sy(53.36) + 16, stroke: "var(--ink)", "stroke-width": 3, "marker-end": "url(#arrow)" });
+      label(x - 22, sy(51.7), ["surprise +3.4"], { anchor: "end", bold: true });
+      label(x - 22, sy(53.36) - 22, ["measured 53.4"], { anchor: "end" });
+      el("circle", { cx: x, cy: sy(50), r: 6, fill: "var(--prior-line)" });
+      label(x + 18, sy(50) + FS * 1.2, ["expected 50"], {});
+    },
+    unknown100k() {
+      text(sx(5), sy(56) + FS * 0.35, "?", { "text-anchor": "middle", "font-size": FS * 2.2, "font-weight": 700, fill: "var(--mean)" });
+      label(sx(5) + 26, sy(56) + FS * 1.4, ["expected 56"], {});
+    },
+    predict100k() {
+      const p = f(5);
+      errorBar(5, p.mean, p.sd, "var(--mean)");
+      label(sx(5) - 24, sy(p.mean + p.sd) - 16, [`prediction ${p.mean.toFixed(1)} ± ${p.sd.toFixed(1)}`], { anchor: "end", bold: true });
+    },
+    real100k() {
+      diamond(5, 57.72, "var(--red)");
+      if (narrow) label(sx(5), sy(f(5).mean - f(5).sd) + FS * 1.6, ["real run: 57.7"], { anchor: "middle", bold: true });
+      else label(sx(5) + 26, sy(57.72) + FS * 0.35, ["real run: 57.7"], { bold: true });
+    },
+    bandNarrow() {
+      label(sx(3.3), sy(f(3.3).mean - f(3.3).sd) + FS * 2.2, ["narrow near", "measurements"], { anchor: "middle" });
+    },
+    bandWide() {
+      const p = f(6);
+      errorBar(6, p.mean, p.sd, "var(--mean)");
+      label(sx(6) - 24, sy(p.mean - p.sd) + FS * 1.6, ["widest far away", `1M: ± ${p.sd.toFixed(1)}`], { anchor: "end", bold: true });
+    },
+    sd5k() {
+      const x = lg(5000), p = f(x);
+      errorBar(x, p.mean, p.sd, "var(--mean)");
+      label(sx(x), sy(p.mean - p.sd) + FS * 1.8, [`5k: ± ${p.sd.toFixed(1)}`], { anchor: "middle", bold: true });
+    },
+    sd1M() {
+      const p = f(6);
+      errorBar(6, p.mean, p.sd, "var(--mean)");
+      label(sx(6) - 24, sy(p.mean - p.sd) + FS * 1.6, [`1M: ± ${p.sd.toFixed(1)}`], { anchor: "end", bold: true });
+    },
+    twoPredictions(p) {
+      const g = posterior([{ x: 4, y: p.whatIf }], state.ell);
+      const a = f(5), b = g(5);
+      errorBar(5, a.mean, a.sd, "var(--mean)");
+      errorBar(5, b.mean, b.sd, "var(--red)");
+      label(sx(5) + 26, sy(a.mean) + FS * 0.35, [`${a.mean.toFixed(1)} ± ${a.sd.toFixed(1)}`], { bold: true });
+      label(sx(5) + 26, sy(b.mean) + FS * 0.35, [`${b.mean.toFixed(1)} ± ${b.sd.toFixed(1)}`], { bold: true, fill: "var(--ink)" });
+      label(sx(4) - 26, sy(53.36) - 10, ["measured 53.4"], { anchor: "end" });
+      label(sx(4) - 26, sy(p.whatIf) + FS * 0.35, [`what if: ${p.whatIf}`], { anchor: "end" });
+      el("circle", { cx: sx(4), cy: sy(p.whatIf), r: shot ? 13 : 8, fill: "var(--bg)", stroke: "var(--red)", "stroke-width": shot ? 4 : 2.5 });
+    },
+  };
+  function addArrowMarker() {
+    const defs = el("defs", {});
+    const mk = el("marker", { id: "arrow", viewBox: "0 0 10 10", refX: 5, refY: 5, markerWidth: 5, markerHeight: 5, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0L10,5L0,10Z", fill: "var(--ink)" }, mk);
+  }
+
+  // Slide 5 frame: similarity to the 10k measurement.
+  function renderKernel() {
+    const ky = y => M.t + (1.15 - y) / 1.2 * PH;
+    for (const v of [0, 0.25, 0.5, 0.75, 1]) {
+      el("line", { x1: M.l, x2: M.l + PW, y1: ky(v), y2: ky(v), stroke: "var(--grid)" });
+      text(M.l - 12, ky(v) + FS * 0.35, v.toFixed(2).replace(/0$/, ""), { "text-anchor": "end", fill: "var(--muted)" });
+    }
+    for (let x = X_MIN; x <= X_MAX; x++) {
+      el("line", { x1: sx(x), x2: sx(x), y1: M.t, y2: M.t + PH, stroke: "var(--grid)" });
+      text(sx(x), M.t + PH + FS * 1.3, fmtSize(Math.pow(10, x)), { "text-anchor": "middle", fill: "var(--muted)" });
+    }
+    text(M.l + PW / 2, H - FS * 0.6, "Training sentence pairs (log scale)", { "text-anchor": "middle", fill: "var(--muted)" });
+    const yl = text(0, 0, "Similarity to 10k pairs", { "text-anchor": "middle", fill: "var(--muted)" });
+    yl.setAttribute("transform", `translate(${FS * 1.0},${M.t + PH / 2}) rotate(-90)`);
+    const s = x => sim(x, 4, state.ell);
+    el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L") + `L${sx(X_MAX)},${ky(0)}L${sx(X_MIN)},${ky(0)}Z`, fill: "var(--band)" });
+    el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L"), fill: "none", stroke: "var(--mean)", "stroke-width": 4 });
+    el("circle", { cx: sx(4), cy: ky(1), r: 13, fill: "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": 4 });
+    label(sx(4), ky(1) - 26, ["10k: 1.00 (itself)"], { anchor: "middle", bold: true });
+    for (const [x, name, dx, dy, anchor] of [[lg(20000), "20k", 22, -16, "start"], [5, "100k", 22, -16, "start"], [6, "1M", -16, FS * 1.4, "end"]]) {
+      el("circle", { cx: sx(x), cy: ky(s(x)), r: 9, fill: "var(--mean)" });
+      label(sx(x) + dx, ky(s(x)) + dy, [`${name}: ${s(x).toFixed(2)}`], { anchor, bold: name === "100k" });
+    }
+  }
+
+  function renderTable() {
+    const rows = [3, 4, 5, 6].map(x => {
+      const p = f(x), r = realAt(x);
+      return `<tr><td>${fmtSize(Math.pow(10, x))}</td><td>${p.mean.toFixed(1)}</td><td>± ${p.sd.toFixed(1)}</td><td>${r == null ? "–" : r.toFixed(1)}</td></tr>`;
+    }).join("");
+    document.getElementById("table").innerHTML =
+      `<tr><th>Pairs</th><th>Prediction</th><th>Uncertainty</th><th>Real</th></tr>${rows}`;
+  }
+
+  // ---------- interaction ----------
+  const wrap = document.getElementById("wrap"), tip = document.getElementById("tip");
+  const toSvg = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; };
+  let drag = null, moved = false;
+
+  function hover(e) {
+    const [px, py] = toSvg(e);
+    const x = ix(px);
+    svg.querySelector("#cross")?.remove();
+    if (x < X_MIN || x > X_MAX || py < M.t || py > M.t + PH) { tip.style.display = "none"; return; }
+    const line = el("line", { id: "cross", x1: sx(x), x2: sx(x), y1: M.t, y2: M.t + PH, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "2 3" });
+    line.style.pointerEvents = "none";
+    const p = f(x);
+    let html = `<b>${fmtX(x)} pairs</b>: prediction ${p.mean.toFixed(1)} ± ${p.sd.toFixed(1)}`;
+    if (state.meas.length === 1) {
+      const m = state.meas[0], s = sim(x, m.x, state.ell), surprise = m.y - priorMean(m.x);
+      html += `<br><span class="rule">${priorMean(x).toFixed(1)} + ${s.toFixed(2)} × (${surprise >= 0 ? "+" : ""}${surprise.toFixed(1)}) = ${p.mean.toFixed(1)}`
+            + `<br>± 5 × √(1 − ${s.toFixed(2)}²) = ± ${p.sd.toFixed(1)}</span>`;
+    }
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    const r = wrap.getBoundingClientRect();
+    const left = e.clientX - r.left + 14;
+    tip.style.left = Math.min(left, r.width - tip.offsetWidth - 4) + "px";
+    tip.style.top = (e.clientY - r.top + 14) + "px";
+  }
+
+  if (!shot) {
+    svg.addEventListener("pointerdown", e => {
+      const idx = e.target.dataset?.idx;
+      if (idx != null) { drag = +idx; moved = false; svg.setPointerCapture(e.pointerId); }
+    });
+    svg.addEventListener("pointermove", e => {
+      if (drag != null) {
+        const [, py] = toSvg(e);
+        state.meas[drag].y = Math.max(Y_MIN, Math.min(Y_MAX, iy(py)));
+        moved = true;
+        state.preset = null;
+        render();
+      }
+      hover(e);
+    });
+    svg.addEventListener("pointerup", e => {
+      if (drag != null) { drag = null; return; }
+      const [px, py] = toSvg(e);
+      if (px < M.l || px > M.l + PW || py < M.t || py > M.t + PH) return;
+      const x = ix(px);
+      const [n, y] = REAL.reduce((best, r) => Math.abs(lg(r[0]) - x) < Math.abs(lg(best[0]) - x) ? r : best);
+      if (state.meas.some(m => Math.abs(m.x - lg(n)) < 1e-9)) return;
+      state.meas.push({ x: lg(n), y });
+      state.preset = null;
+      render();
+      hover(e);
+    });
+    svg.addEventListener("dblclick", e => {
+      const idx = e.target.dataset?.idx;
+      if (idx == null) return;
+      state.meas.splice(+idx, 1);
+      render();
+    });
+    svg.addEventListener("pointerleave", () => { tip.style.display = "none"; svg.querySelector("#cross")?.remove(); });
+
+    document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => applyPreset(b.dataset.preset)));
+    document.getElementById("reset").addEventListener("click", () => { state.meas = []; state.preset = null; render(); });
+    document.getElementById("showReal").addEventListener("change", e => { state.showReal = e.target.checked; render(); });
+    document.getElementById("showPrior").addEventListener("change", e => { state.showPrior = e.target.checked; render(); });
+    document.getElementById("ell").addEventListener("input", e => { state.ell = +e.target.value; syncControls(); render(); });
+  }
+
+  function syncControls() {
+    if (shot) return;
+    document.getElementById("showReal").checked = state.showReal;
+    document.getElementById("showPrior").checked = state.showPrior;
+    document.getElementById("ell").value = state.ell;
+    document.getElementById("ellOut").textContent = `10k ↔ 100k similarity: ${sim(4, 5, state.ell).toFixed(2)}`;
+    document.querySelectorAll("[data-preset]").forEach(b => b.setAttribute("aria-pressed", b.dataset.preset === state.preset));
+  }
+
+  if (shot) {
+    document.body.classList.add("shot");
+    document.documentElement.setAttribute("data-theme", "light");
+    applyPreset(shot);
+  } else {
+    applyPreset("reveal");
+  }
+})();
+</script>
+</body>
+</html>
