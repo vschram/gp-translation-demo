@@ -11,7 +11,8 @@ import time
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 URL = "http://localhost:8322/?shot={name}&w={w}&h={h}"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "figures")
-W, H = 1600, 760
+W, H = 1067, 740        # SVG viewBox: text is sized relative to this
+SCALE = 1.5             # window = viewBox x SCALE, for a crisp PNG
 PRESETS = ["decision", "prior", "kernel", "rule", "reveal", "band", "quiz1", "quiz2"]
 
 os.makedirs(OUT, exist_ok=True)
@@ -23,7 +24,7 @@ for name in PRESETS:
         subprocess.run([
             EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars",
             "--force-device-scale-factor=1", f"--user-data-dir={profile}",
-            f"--window-size={W},{H}", f"--screenshot={target}",
+            f"--window-size={round(W * SCALE)},{round(H * SCALE)}", f"--screenshot={target}",
             URL.format(name=name, w=W, h=H),
         ], check=False)
         for _ in range(60):

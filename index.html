@@ -226,7 +226,7 @@
   const H = shot ? +(params.get("h") || 760) : narrow ? 400 : 540;
   const FS = shot ? 30 : 15;                         // base font size in SVG units
   const M = shot ? { l: 120, r: 60, t: 40, b: 105 } : narrow ? { l: 52, r: 16, t: 20, b: 58 } : { l: 64, r: 28, t: 20, b: 58 };
-  const XLABEL = narrow ? "Training sentence pairs (log scale)" : "Training sentence pairs (log scale: each step is ten times more data)";
+  const XLABEL = (narrow || shot) ? "Training sentence pairs (log scale)" : "Training sentence pairs (log scale: each step is ten times more data)";
   const svg = document.getElementById("chart");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   const PW = W - M.l - M.r, PH = H - M.t - M.b;
@@ -398,7 +398,7 @@
     bandWide() {
       const p = f(6);
       errorBar(6, p.mean, p.sd, "var(--mean)");
-      label(sx(6) - 24, sy(p.mean - p.sd) + FS * 1.6, ["widest far away", `1M: ± ${p.sd.toFixed(1)}`], { anchor: "end", bold: true });
+      label(sx(6) - 24, sy(p.mean - p.sd) + FS * 2.4, ["widest far away", `1M: ± ${p.sd.toFixed(1)}`], { anchor: "end", bold: true });
     },
     sd5k() {
       const x = lg(5000), p = f(x);
@@ -447,7 +447,7 @@
     el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L"), fill: "none", stroke: "var(--mean)", "stroke-width": 4 });
     el("circle", { cx: sx(4), cy: ky(1), r: 13, fill: "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": 4 });
     label(sx(4), ky(1) - 26, ["10k: 1.00 (itself)"], { anchor: "middle", bold: true });
-    for (const [x, name, dx, dy, anchor] of [[lg(20000), "20k", 22, -16, "start"], [5, "100k", 22, -16, "start"], [6, "1M", -16, FS * 1.4, "end"]]) {
+    for (const [x, name, dx, dy, anchor] of [[lg(20000), "20k", 22, FS * 1.4, "start"], [5, "100k", 22, -16, "start"], [6, "1M", -16, FS * 1.4, "end"]]) {
       el("circle", { cx: sx(x), cy: ky(s(x)), r: 9, fill: "var(--mean)" });
       label(sx(x) + dx, ky(s(x)) + dy, [`${name}: ${s(x).toFixed(2)}`], { anchor, bold: name === "100k" });
     }
