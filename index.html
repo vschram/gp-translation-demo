@@ -126,7 +126,7 @@
   </div>
 </main>
 <footer>
-  Data: mBART-50 fine-tuned on Indonesian→English, ChrF score against training sentence pairs
+  Data: mBART-50 fine-tuned on Indonesian→English, translation-quality score against training sentence pairs
   (<a href="https://github.com/vschram/ZeroShot_for_PSL">source</a>).
   Prior: trend 50 at 10k pairs, +6 per tenfold, ±5 (one standard deviation).
   Kernel: squared exponential on log<sub>10</sub>(pairs). Measurements are treated as noise-free.
@@ -297,7 +297,7 @@
     const p = PRESETS[state.preset] || {};
     if (shot && p.kernelOnly) return renderKernel();
     f = posterior(state.meas, state.ell);
-    axes("Translation quality (ChrF)", [20, 30, 40, 50, 60, 70].filter(y => y >= Y_MIN && y <= Y_MAX), y => y);
+    axes("Translation quality (higher is better)",[20, 30, 40, 50, 60, 70].filter(y => y >= Y_MIN && y <= Y_MAX), y => y);
     const defs = el("defs", {});
     el("rect", { x: M.l, y: M.t, width: PW, height: PH }, el("clipPath", { id: "plotclip" }, defs));
     const plot = el("g", { "clip-path": "url(#plotclip)" });
