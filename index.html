@@ -520,11 +520,14 @@
   let drag = null, moved = false;
 
   const kernelView = () => !!PRESETS[state.preset]?.kernelOnly;
+  // 100 and 1M sit on the plot's edges, so accept the pointer a little outside them and clamp.
+  const inPlot = (px, py) => px >= M.l - 10 && px <= M.l + PW + M.r && py >= M.t && py <= M.t + PH;
+  const clampX = px => Math.min(X_MAX, Math.max(X_MIN, ix(px)));
   function hover(e) {
     const [px, py] = toSvg(e);
-    const x = ix(px);
+    const x = clampX(px);
     svg.querySelector("#cross")?.remove();
-    if (tab().noHover || x < X_MIN || x > X_MAX || py < M.t || py > M.t + PH) { tip.style.display = "none"; return; }
+    if (tab().noHover || !inPlot(px, py)) { tip.style.display = "none"; return; }
     const line = el("line", { id: "cross", x1: sx(x), x2: sx(x), y1: M.t, y2: M.t + PH, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "2 3" });
     line.style.pointerEvents = "none";
     const p = f(x);
@@ -563,8 +566,8 @@
       if (drag != null) { drag = null; return; }
       if (!tab().click) return;   // only tab 6 runs experiments
       const [px, py] = toSvg(e);
-      if (px < M.l || px > M.l + PW || py < M.t || py > M.t + PH) return;
-      const x = ix(px);
+      if (!inPlot(px, py)) return;
+      const x = clampX(px);
       const [n, y] = REAL.reduce((best, r) => Math.abs(lg(r[0]) - x) < Math.abs(lg(best[0]) - x) ? r : best);
       if (state.meas.some(m => Math.abs(m.x - lg(n)) < 1e-9)) return;
       state.meas.push({ x: lg(n), y });
