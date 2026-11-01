@@ -77,6 +77,8 @@
   .controls label { font-size: 0.9rem; display: inline-flex; gap: 6px; align-items: center; }
   .chart-wrap { position: relative; background: var(--bg); touch-action: none; }
   svg { display: block; width: 100%; height: auto; user-select: none; }
+  /* Keep the whole chart on screen: its width follows the window height (--ar = width / height). */
+  body:not(.shot) svg { width: min(100%, max(320px, calc((100vh - 330px) * var(--ar, 1.78)))); margin: 0 auto; }
   .tooltip {
     position: absolute; pointer-events: none; background: var(--panel); color: var(--ink);
     border: 1px solid var(--grid); border-radius: 6px; padding: 6px 10px; font-size: 0.85rem;
@@ -110,7 +112,7 @@
     <button id="reset" data-control="reset">Start again</button>
     <label data-control="showReal"><input type="checkbox" id="showReal"> Show real curve</label>
     <label data-control="showPrior"><input type="checkbox" id="showPrior" checked> Show prior</label>
-    <label data-control="ell">Similarity reach
+    <label data-control="ell">Similarity between 10k and 100k
       <input type="range" id="ell" min="0.4" max="3" step="0.01">
       <span id="ellOut"></span>
     </label>
@@ -229,7 +231,7 @@
     { id: "prior",        preset: "prior",    label: "2 Prior",        controls: [],
       task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
     { id: "kernel",       preset: "kernel",   label: "3 Kernel",       controls: ["ell"],
-      task: "Similarity to the 10k run falls as dataset sizes move apart. Move the similarity slider and watch how far it reaches." },
+      task: "Similarity to the 10k run falls as dataset sizes move apart. Move the slider to change the similarity between 10k and 100k, and watch the whole curve follow." },
     { id: "conditioning", preset: "rule",     label: "4 Conditioning", controls: [],
       task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its standard deviation, then check in the next tab." },
     { id: "posterior",    preset: "reveal",   label: "5 Posterior",    controls: ["showPrior", "showReal"], table: true,
@@ -287,6 +289,7 @@
   const XLABEL = (narrow || shot) ? "Training sentence pairs (log scale)" : "Training sentence pairs (log scale: each step is ten times more data)";
   const svg = document.getElementById("chart");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.style.setProperty("--ar", W / H);
   const PW = W - M.l - M.r, PH = H - M.t - M.b;
   const sx = x => M.l + (x - X_MIN) / (X_MAX - X_MIN) * PW;
   const sy = y => M.t + (Y_MAX - y) / (Y_MAX - Y_MIN) * PH;
@@ -638,7 +641,7 @@
     document.getElementById("showReal").checked = state.showReal;
     document.getElementById("showPrior").checked = state.showPrior;
     document.getElementById("ell").value = state.ell;
-    document.getElementById("ellOut").textContent = `10k ↔ 100k similarity: ${sim(4, 5, state.ell).toFixed(2)}`;
+    document.getElementById("ellOut").textContent = sim(4, 5, state.ell).toFixed(2);
   }
 
   if (shot) {
