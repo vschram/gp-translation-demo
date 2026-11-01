@@ -129,7 +129,7 @@
         <li>Each tab reproduces one step of the lesson. Work through them in order, then experiment.</li>
         <li>Hover to see the prediction at any size. With one measurement, the tooltip shows the rule: expected + similarity × surprise.</li>
         <li>In tab 6, click the chart to run an experiment at that dataset size: the real measured score appears. Double-click a measurement to remove it.</li>
-        <li>In Quiz 2, drag a measurement up or down to ask "what if it had scored this?"</li>
+        <li>In Quiz 2, drag the red point up or down to ask "what if the 10k run had scored this?"</li>
       </ul>
     </div>
   </div>
@@ -172,6 +172,7 @@
     showPost: true,
     preset: null,
     tab: null,
+    whatIf: null,        // Quiz 2: the "what if the 10k run had scored this?" value
   };
 
   // ---------- Gaussian process ----------
@@ -214,7 +215,7 @@
   };
   // ---------- tabs: one per step of the lesson; ?tab=<id> opens one directly ----------
   // Each tab shows only the controls its task needs. click: clicking the chart runs an
-  // experiment (double-click removes one); drag: measurements can be dragged; table: show predictions.
+  // experiment (double-click removes one); drag: the red "what if" point can be dragged; table: show predictions.
   const TABS = [
     { id: "motivation",   preset: "decision", label: "1 Motivation",   controls: [], noHover: true,
       task: "One run with 10k sentence pairs scored 53.4. How good would the model be with 100k pairs, and how sure can we be?" },
@@ -231,7 +232,7 @@
     { id: "quiz1",        preset: "quiz1",    label: "Quiz 1",         controls: [], table: true,
       task: "Measurements at 1k and 10k: where is the prediction least certain? Hover to compare 5k with 1M." },
     { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         controls: ["reset"], drag: true, table: true,
-      task: "If the 10k run had scored 45 (red), the prediction moves but the ± 3 stays. Drag the 10k measurement to try other scores." },
+      task: "If the 10k run had scored 45 (red), the prediction moves but the ± 3 stays. Drag the red point up or down to try other scores." },
   ];
   const tab = () => TABS.find(t => t.id === state.tab) || {};
   function applyTab(id) {
@@ -256,6 +257,7 @@
     state.preset = name;
     state.ell = ELL_DEFAULT;
     state.meas = p.meas.map(x => ({ x, y: realAt(x) }));
+    state.whatIf = p.whatIf ?? null;
     state.showPrior = p.showPrior ?? true;
     state.showPost = p.showPost ?? true;
     state.showReal = false;
@@ -354,8 +356,8 @@
       el("path", { d: bandPath(x => ({ mean: priorMean(x), sd: SIGMA })), fill: "var(--prior-band)"  }, plot);
       el("path", { d: linePath(priorMean), fill: "none", stroke: "var(--prior-line)", "stroke-width": shot ? 3 : 2, "stroke-dasharray": shot ? "12 8" : "7 5"  }, plot);
     }
-    if (p.whatIf != null && state.showPost) {
-      const g = posterior([{ x: 4, y: p.whatIf }], state.ell);
+    if (state.whatIf != null && state.showPost) {
+      const g = posterior([{ x: 4, y: state.whatIf }], state.ell);
       el("path", { d: bandPath(g), fill: "rgba(255, 45, 60, 0.16)"  }, plot);
       el("path", { d: linePath(x => g(x).mean), fill: "none", stroke: "var(--red)", "stroke-width": shot ? 4 : 2.5, "stroke-dasharray": shot ? "12 8" : "7 5"  }, plot);
     }
@@ -375,7 +377,6 @@
       const c = el("circle", {
         cx: sx(m.x), cy: sy(m.y), r: shot ? 13 : 8,
         fill: edited ? "var(--bg)" : "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": shot ? 4 : 2.5,
-        style: !shot && tab().drag ? "cursor: ns-resize" : "",
       });
       c.dataset.idx = i;
     });
@@ -461,16 +462,20 @@
       errorBar(6, p.mean, p.sd, "var(--mean)");
       label(sx(6) - 24, sy(p.mean - p.sd) + FS * 1.6, [`1M: ± ${p.sd.toFixed(1)}`], { anchor: "end", bold: true });
     },
-    twoPredictions(p) {
-      const g = posterior([{ x: 4, y: p.whatIf }], state.ell);
+    twoPredictions() {
+      const w = state.whatIf;
+      const g = posterior([{ x: 4, y: w }], state.ell);
       const a = f(5), b = g(5);
       errorBar(5, a.mean, a.sd, "var(--mean)");
       errorBar(5, b.mean, b.sd, "var(--red)");
       label(sx(5) + 26, sy(a.mean) + FS * 0.35, [`${a.mean.toFixed(1)} ± ${a.sd.toFixed(1)}`], { bold: true });
       label(sx(5) + 26, sy(b.mean) + FS * 0.35, [`${b.mean.toFixed(1)} ± ${b.sd.toFixed(1)}`], { bold: true, fill: "var(--ink)" });
       label(sx(4) - 26, sy(53.36) - 10, ["measured 53.4"], { anchor: "end" });
-      label(sx(4) - 26, sy(p.whatIf) + FS * 0.35, [`what if: ${p.whatIf}`], { anchor: "end" });
-      el("circle", { cx: sx(4), cy: sy(p.whatIf), r: shot ? 13 : 8, fill: "var(--bg)", stroke: "var(--red)", "stroke-width": shot ? 4 : 2.5 });
+      label(sx(4) - 26, sy(w) + FS * 0.35, [`what if: ${Number.isInteger(w) ? w : w.toFixed(1)}`], { anchor: "end" });
+      // The red "what if" point is the one learners drag in Quiz 2.
+      const c = el("circle", { cx: sx(4), cy: sy(w), r: shot ? 13 : 8, fill: "var(--bg)", stroke: "var(--red)", "stroke-width": shot ? 4 : 2.5,
+        style: !shot && tab().drag ? "cursor: ns-resize" : "" });
+      c.dataset.whatif = "1";
     },
   };
   function addArrowMarker() {
@@ -549,15 +554,13 @@
 
   if (!shot) {
     svg.addEventListener("pointerdown", e => {
-      const idx = e.target.dataset?.idx;
-      if (idx != null && tab().drag) { drag = +idx; moved = false; svg.setPointerCapture(e.pointerId); }
+      if (e.target.dataset?.whatif != null && tab().drag) { drag = "whatif"; moved = false; svg.setPointerCapture(e.pointerId); }
     });
     svg.addEventListener("pointermove", e => {
       if (drag != null) {
         const [, py] = toSvg(e);
-        state.meas[drag].y = Math.max(Y_MIN, Math.min(Y_MAX, iy(py)));
+        state.whatIf = Math.round(Math.max(Y_MIN, Math.min(Y_MAX, iy(py))) * 10) / 10;
         moved = true;
-        state.preset = null;
         render();
       }
       hover(e);
