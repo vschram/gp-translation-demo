@@ -40,6 +40,6 @@ for name in PRESETS:
     status = capture(URL.format(name=name, w=W, h=H), target, round(W * SCALE), round(H * SCALE))
     print(f"{name}: {status}")
 
-# The demo page itself, tabs visible, for the "explore the demo" slide.
+# The demo page itself on tab 1, where slide 10's QR code lands, for the "explore the demo" slide.
 target = os.path.abspath(os.path.join(OUT, "gp_demo_tabs.png"))
-print("demo_tabs:", capture("http://localhost:8322/?tab=experiment&theme=light", target, 1000, 620, scale=1.5))
+print("demo_tabs:", capture("http://localhost:8322/?tab=motivation&theme=light", target, 1000, 620, scale=1.5))
