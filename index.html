@@ -135,10 +135,9 @@
   </div>
 </main>
 <footer>
-  Data: mBART-50 fine-tuned on Indonesian→English, translation-quality score against training sentence pairs
+  Data: real measurements of a translation model trained on Indonesian→English sentence pairs
   (<a href="https://github.com/vschram/ZeroShot_for_PSL">source</a>).
-  Prior: trend 50 at 10k pairs, +6 per tenfold, ±5 (one standard deviation).
-  Kernel: squared exponential on log<sub>10</sub>(pairs). Measurements are treated as noise-free.
+  Prior: expected 50 at 10k pairs and 56 at 100k, ± 5 (one standard deviation).
 </footer>
 
 <script>
@@ -219,8 +218,8 @@
     { id: "prior",        preset: "prior",    label: "2 Prior",        task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
     { id: "kernel",       preset: "kernel",   label: "3 Kernel",       task: "Similarity to the 10k run falls as dataset sizes move apart. Move the similarity slider and watch how far it reaches." },
     { id: "conditioning", preset: "rule",     label: "4 Conditioning", task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its standard deviation, then check in the next tab." },
-    { id: "posterior",    preset: "reveal",   label: "5 Posterior",    task: "The prediction at 100k is 58.7 ± 3, and the real run scored 57.7. Hover anywhere to see the rule at work." },
-    { id: "experiment",   preset: "band",     label: "6 Next experiment", task: "The band is narrow near measurements and widest far away. Click where it is widest to run that experiment, and watch the band shrink." },
+    { id: "posterior",    preset: "reveal",   label: "5 Posterior",    task: "Our updated belief about the score at 100k: 58.7 ± 3. The real run scored 57.7. Hover anywhere to see the rule at work." },
+    { id: "experiment",   preset: "band",     label: "6 Next experiment", task: "The band is widest where we know least. Click where it is widest to run that experiment, and watch the band shrink." },
     { id: "quiz1",        preset: "quiz1",    label: "Quiz 1",         task: "Measurements at 1k and 10k: where is the prediction least certain? Hover to compare 5k with 1M." },
     { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         task: "If the 10k run had scored 45 (red), the prediction moves but the ± 3 stays. Drag the 10k measurement to try other scores." },
   ];
