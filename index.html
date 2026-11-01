@@ -57,6 +57,15 @@
   header h1 { margin: 0 auto; max-width: 1000px; font-size: 1.5rem; font-weight: 650; }
   header p { margin: 4px auto 0; max-width: 1000px; color: #cdd3ea; }
   main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .tabs button {
+    font: inherit; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px 6px 0 0;
+    border: 1px solid var(--grid); border-bottom: 3px solid transparent; background: var(--panel); color: var(--ink); cursor: pointer;
+  }
+  .tabs button:hover { border-bottom-color: var(--sky); }
+  .tabs button[aria-selected="true"] { background: var(--navy); color: #fff; border-color: var(--navy); border-bottom-color: var(--sky); }
+  .tabs .after { color: var(--muted); font-size: 0.8rem; align-self: center; margin-left: 6px; }
+  .task { margin: 0 0 12px; padding: 8px 12px; background: var(--panel); border-left: 4px solid var(--sky); border-radius: 4px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
   .controls button {
     font: inherit; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px;
@@ -83,7 +92,7 @@
   footer { max-width: 1000px; margin: 0 auto; padding: 8px 16px 24px; color: var(--muted); font-size: 0.8rem; }
   footer a { color: inherit; }
   /* screenshot mode: plot only */
-  body.shot header, body.shot .controls, body.shot .readout, body.shot footer { display: none; }
+  body.shot header, body.shot .tabs, body.shot .task, body.shot .controls, body.shot .readout, body.shot footer { display: none; }
   body.shot main { max-width: none; padding: 0; }
 </style>
 </head>
@@ -93,10 +102,9 @@
   <p>Indonesian → English translation: how good will the model be with more training data, and how sure can we be?</p>
 </header>
 <main>
+  <div class="tabs" role="tablist" id="tabs" aria-label="Steps of the lesson"></div>
+  <p class="task" id="task"></p>
   <div class="controls" id="controls">
-    <button data-preset="prior">Prior only</button>
-    <button data-preset="reveal">One measurement</button>
-    <button data-preset="band">Several measurements</button>
     <button id="reset">Clear measurements</button>
     <label><input type="checkbox" id="showReal"> Show real curve</label>
     <label><input type="checkbox" id="showPrior" checked> Show prior</label>
@@ -117,6 +125,7 @@
     <div class="card">
       <h2>Try it</h2>
       <ul>
+        <li>Each tab reproduces one step of the lesson. Work through them in order, then experiment.</li>
         <li>Click the chart to run an experiment at that dataset size: the real measured score appears. Try one where the band is widest, and watch it shrink.</li>
         <li>Hover to see the prediction at any size. With one measurement, the tooltip shows the rule: expected + similarity × surprise.</li>
         <li>Double-click a measurement to remove it.</li>
@@ -163,6 +172,7 @@
     showPrior: true,
     showPost: true,
     preset: null,
+    tab: null,
   };
 
   // ---------- Gaussian process ----------
@@ -203,6 +213,29 @@
     quiz1:    { meas: [3, 4], showPrior: false, showPost: true, notes: ["sd5k", "sd1M"] },
     quiz2:    { meas: [4], showPrior: false, showPost: true, whatIf: 45, notes: ["twoPredictions"] },
   };
+  // ---------- tabs: one per step of the lesson; ?tab=<id> opens one directly ----------
+  const TABS = [
+    { id: "motivation",   preset: "decision", label: "1 Motivation",   task: "One run with 10k sentence pairs scored 53.4. How good would the model be with 100k pairs, and how sure can we be?" },
+    { id: "prior",        preset: "prior",    label: "2 Prior",        task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
+    { id: "kernel",       preset: "kernel",   label: "3 Kernel",       task: "Similarity to the 10k run falls as dataset sizes move apart. Move the similarity slider and watch how far it reaches." },
+    { id: "conditioning", preset: "rule",     label: "4 Conditioning", task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its standard deviation, then check in the next tab." },
+    { id: "posterior",    preset: "reveal",   label: "5 Posterior",    task: "The prediction at 100k is 58.7 ± 3, and the real run scored 57.7. Hover anywhere to see the rule at work." },
+    { id: "experiment",   preset: "band",     label: "6 Next experiment", task: "The band is narrow near measurements and widest far away. Click where it is widest to run that experiment, and watch the band shrink." },
+    { id: "quiz1",        preset: "quiz1",    label: "Quiz 1",         task: "Measurements at 1k and 10k: where is the prediction least certain? Hover to compare 5k with 1M." },
+    { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         task: "If the 10k run had scored 45 (red), the prediction moves but the ± 3 stays. Drag the 10k measurement to try other scores." },
+  ];
+  function applyTab(id) {
+    const t = TABS.find(t => t.id === id) || TABS[0];
+    state.tab = t.id;
+    if (!shot) {
+      document.getElementById("task").textContent = t.task;
+      const url = new URL(location.href);
+      url.searchParams.set("tab", t.id);
+      history.replaceState(null, "", url);
+    }
+    applyPreset(t.preset);
+  }
+
   function applyPreset(name) {
     const p = PRESETS[name];
     if (!p) return;
@@ -219,6 +252,7 @@
   // ---------- layout ----------
   const params = new URLSearchParams(location.search);
   const shot = params.get("shot");
+  if (params.get("theme")) document.documentElement.setAttribute("data-theme", params.get("theme"));
   if (shot) { Y_MIN = 35; Y_MAX = 70; }
   const narrow = !shot && window.innerWidth < 640;   // phones: smaller canvas so text stays legible
   const W = shot ? +(params.get("w") || 1600) : narrow ? 480 : 960;
@@ -295,7 +329,7 @@
   function render() {
     svg.replaceChildren();
     const p = PRESETS[state.preset] || {};
-    if (shot && p.kernelOnly) return renderKernel();
+    if (p.kernelOnly) { renderKernel(); if (!shot) { renderTable(); syncTabs(); } return; }
     f = posterior(state.meas, state.ell);
     axes("Translation quality (higher is better)",[20, 30, 40, 50, 60, 70].filter(y => y >= Y_MIN && y <= Y_MAX), y => y);
     const defs = el("defs", {});
@@ -332,7 +366,10 @@
       c.dataset.idx = i;
     });
     drawLegend();
-    if (!shot) { renderTable(); document.querySelectorAll("[data-preset]").forEach(b => b.setAttribute("aria-pressed", b.dataset.preset === state.preset)); }
+    if (!shot) { renderTable(); syncTabs(); }
+  }
+  function syncTabs() {
+    document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
   }
 
   function drawLegend() {
@@ -431,6 +468,7 @@
   // Slide 5 frame: similarity to the 10k measurement.
   function renderKernel() {
     const ky = y => M.t + (1.15 - y) / 1.2 * PH;
+    const k = shot ? 1 : 0.55;   // marker and offset scale for the interactive page
     for (const v of [0, 0.25, 0.5, 0.75, 1]) {
       el("line", { x1: M.l, x2: M.l + PW, y1: ky(v), y2: ky(v), stroke: "var(--grid)" });
       text(M.l - 12, ky(v) + FS * 0.35, v.toFixed(2).replace(/0$/, ""), { "text-anchor": "end", fill: "var(--muted)" });
@@ -444,11 +482,11 @@
     yl.setAttribute("transform", `translate(${FS * 1.0},${M.t + PH / 2}) rotate(-90)`);
     const s = x => sim(x, 4, state.ell);
     el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L") + `L${sx(X_MAX)},${ky(0)}L${sx(X_MIN)},${ky(0)}Z`, fill: "var(--band)" });
-    el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L"), fill: "none", stroke: "var(--mean)", "stroke-width": 4 });
-    el("circle", { cx: sx(4), cy: ky(1), r: 13, fill: "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": 4 });
-    label(sx(4), ky(1) - 26, ["10k: 1.00 (itself)"], { anchor: "middle", bold: true });
-    for (const [x, name, dx, dy, anchor] of [[lg(20000), "20k", 22, FS * 1.4, "start"], [5, "100k", 22, -16, "start"], [6, "1M", -16, FS * 1.4, "end"]]) {
-      el("circle", { cx: sx(x), cy: ky(s(x)), r: 9, fill: "var(--mean)" });
+    el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L"), fill: "none", stroke: "var(--mean)", "stroke-width": 4 * k });
+    el("circle", { cx: sx(4), cy: ky(1), r: 13 * k, fill: "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": 4 * k });
+    label(sx(4), ky(1) - 26 * k, ["10k: 1.00 (itself)"], { anchor: "middle", bold: true });
+    for (const [x, name, dx, dy, anchor] of [[lg(20000), "20k", 22 * k, FS * 1.4, "start"], [5, "100k", 22 * k, -16 * k, "start"], [6, "1M", -16 * k, FS * 1.4, "end"]]) {
+      el("circle", { cx: sx(x), cy: ky(s(x)), r: 9 * k, fill: "var(--mean)" });
       label(sx(x) + dx, ky(s(x)) + dy, [`${name}: ${s(x).toFixed(2)}`], { anchor, bold: name === "100k" });
     }
   }
@@ -467,6 +505,7 @@
   const toSvg = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; };
   let drag = null, moved = false;
 
+  const kernelView = () => !!PRESETS[state.preset]?.kernelOnly;
   function hover(e) {
     const [px, py] = toSvg(e);
     const x = ix(px);
@@ -476,7 +515,9 @@
     line.style.pointerEvents = "none";
     const p = f(x);
     let html = `<b>${fmtX(x)} pairs</b>: prediction ${p.mean.toFixed(1)} ± ${p.sd.toFixed(1)}`;
-    if (state.meas.length === 1) {
+    if (kernelView()) html = `<b>${fmtX(x)} pairs</b>: similarity to 10k = ${sim(x, 4, state.ell).toFixed(2)}`;
+    else if (!state.showPost) html = `<b>${fmtX(x)} pairs</b>: expected ${priorMean(x).toFixed(1)} ± ${SIGMA}`;
+    else if (state.meas.length === 1) {
       const m = state.meas[0], s = sim(x, m.x, state.ell), surprise = m.y - priorMean(m.x);
       html += `<br><span class="rule">${priorMean(x).toFixed(1)} + ${s.toFixed(2)} × (${surprise >= 0 ? "+" : ""}${surprise.toFixed(1)}) = ${p.mean.toFixed(1)}`
             + `<br>± 5 × √(1 − ${s.toFixed(2)}²) = ± ${p.sd.toFixed(1)}</span>`;
@@ -506,6 +547,7 @@
     });
     svg.addEventListener("pointerup", e => {
       if (drag != null) { drag = null; return; }
+      if (kernelView()) return;   // the similarity plot has no measurements to add
       const [px, py] = toSvg(e);
       if (px < M.l || px > M.l + PW || py < M.t || py > M.t + PH) return;
       const x = ix(px);
@@ -524,7 +566,16 @@
     });
     svg.addEventListener("pointerleave", () => { tip.style.display = "none"; svg.querySelector("#cross")?.remove(); });
 
-    document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => applyPreset(b.dataset.preset)));
+    const tabsEl = document.getElementById("tabs");
+    for (const t of TABS) {
+      if (t.id === "quiz1") { const s = document.createElement("span"); s.className = "after"; s.textContent = "After the quiz:"; tabsEl.appendChild(s); }
+      const b = document.createElement("button");
+      b.setAttribute("role", "tab");
+      b.dataset.tab = t.id;
+      b.textContent = t.label;
+      b.addEventListener("click", () => applyTab(t.id));
+      tabsEl.appendChild(b);
+    }
     document.getElementById("reset").addEventListener("click", () => { state.meas = []; state.preset = null; render(); });
     document.getElementById("showReal").addEventListener("change", e => { state.showReal = e.target.checked; render(); });
     document.getElementById("showPrior").addEventListener("change", e => { state.showPrior = e.target.checked; render(); });
@@ -537,7 +588,6 @@
     document.getElementById("showPrior").checked = state.showPrior;
     document.getElementById("ell").value = state.ell;
     document.getElementById("ellOut").textContent = `10k ↔ 100k similarity: ${sim(4, 5, state.ell).toFixed(2)}`;
-    document.querySelectorAll("[data-preset]").forEach(b => b.setAttribute("aria-pressed", b.dataset.preset === state.preset));
   }
 
   if (shot) {
@@ -545,7 +595,8 @@
     document.documentElement.setAttribute("data-theme", "light");
     applyPreset(shot);
   } else {
-    applyPreset("band");   // matches slide 8, where the lesson sends learners here
+    // Slide 7's QR code opens ?tab=experiment; the plain address starts at the first tab.
+    applyTab(params.get("tab") || "motivation");
   }
 })();
 </script>
