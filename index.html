@@ -106,7 +106,7 @@
   <div class="tabs" role="tablist" id="tabs" aria-label="Steps of the lesson"></div>
   <p class="task" id="task"></p>
   <div class="controls" id="controls">
-    <button id="reset" data-control="reset">Clear measurements</button>
+    <button id="reset" data-control="reset">Start again</button>
     <label data-control="showReal"><input type="checkbox" id="showReal"> Show real curve</label>
     <label data-control="showPrior"><input type="checkbox" id="showPrior" checked> Show prior</label>
     <label data-control="ell">Similarity reach
@@ -230,7 +230,7 @@
       task: "The band is widest where we know least. Click where it is widest to run that experiment, and watch the band shrink." },
     { id: "quiz1",        preset: "quiz1",    label: "Quiz 1",         controls: [], table: true,
       task: "Measurements at 1k and 10k: where is the prediction least certain? Hover to compare 5k with 1M." },
-    { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         controls: [], drag: true, table: true,
+    { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         controls: ["reset"], drag: true, table: true,
       task: "If the 10k run had scored 45 (red), the prediction moves but the ± 3 stays. Drag the 10k measurement to try other scores." },
   ];
   const tab = () => TABS.find(t => t.id === state.tab) || {};
@@ -590,7 +590,8 @@
       b.addEventListener("click", () => applyTab(t.id));
       tabsEl.appendChild(b);
     }
-    document.getElementById("reset").addEventListener("click", () => { state.meas = []; state.preset = null; render(); });
+    // Start again: restore this tab's starting measurements and settings.
+    document.getElementById("reset").addEventListener("click", () => applyTab(state.tab));
     document.getElementById("showReal").addEventListener("change", e => { state.showReal = e.target.checked; render(); });
     document.getElementById("showPrior").addEventListener("change", e => { state.showPrior = e.target.checked; render(); });
     document.getElementById("ell").addEventListener("input", e => { state.ell = +e.target.value; syncControls(); render(); });
