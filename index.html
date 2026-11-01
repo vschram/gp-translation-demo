@@ -97,6 +97,15 @@
   /* screenshot mode: plot only */
   body.shot header, body.shot .tabs, body.shot .task, body.shot .controls, body.shot .readout, body.shot footer { display: none; }
   body.shot main { max-width: none; padding: 0; }
+
+  /* Side-by-side preview: chart left, task + controls + cards right. */
+  main { max-width: 1320px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0 24px; align-items: start; }
+  main > .tabs { grid-column: 1 / -1; }
+  .side .controls { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .side .readout { grid-template-columns: 1fr; margin-top: 12px; }
+  .side .task { margin-top: 0; }
+  header h1, header p, footer { max-width: 1320px; }
+  @media (max-width: 900px) { main { display: block; } }
 </style>
 </head>
 <body>
@@ -106,6 +115,11 @@
 </header>
 <main>
   <div class="tabs" role="tablist" id="tabs" aria-label="Steps of the lesson"></div>
+  <div class="chart-wrap" id="wrap">
+    <svg id="chart" role="img" aria-label="Gaussian process prediction of translation quality against training set size"></svg>
+    <div class="tooltip" id="tip"></div>
+  </div>
+  <aside class="side">
   <p class="task" id="task"></p>
   <div class="controls" id="controls">
     <button id="reset" data-control="reset">Start again</button>
@@ -117,16 +131,12 @@
     </label>
     <span data-control="spent" id="spent" class="spent"></span>
   </div>
-  <div class="chart-wrap" id="wrap">
-    <svg id="chart" role="img" aria-label="Gaussian process prediction of translation quality against training set size"></svg>
-    <div class="tooltip" id="tip"></div>
-  </div>
   <div class="readout">
     <div class="card" id="predCard">
       <h2>Predictions</h2>
       <table id="table"></table>
     </div>
-    <div class="card">
+    <div class="card" id="tryCard">
       <h2>Try it</h2>
       <ul>
         <li>Each tab reproduces one step of the lesson. Work through them in order, then experiment.</li>
@@ -136,6 +146,7 @@
       </ul>
     </div>
   </div>
+  </aside>
 </main>
 <footer>
   Data: real measurements of a translation model trained on Indonesian→English sentence pairs
@@ -253,6 +264,7 @@
       document.querySelectorAll("[data-control]").forEach(c => { c.hidden = !t.controls.includes(c.dataset.control); });
       document.getElementById("controls").hidden = !t.controls.length;
       document.getElementById("predCard").hidden = !t.table;
+      document.getElementById("tryCard").hidden = t !== TABS[0];   // the how-to is read once, on tab 1
       svg.style.cursor = t.click ? "crosshair" : "";
       fitChart();   // the task line and control row change height between tabs
       const url = new URL(location.href);
