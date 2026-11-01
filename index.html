@@ -68,6 +68,7 @@
   .task { margin: 0 0 12px; padding: 8px 12px; background: var(--panel); border-left: 4px solid var(--sky); border-radius: 4px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
   [hidden] { display: none !important; }
+  .spent { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
   .controls button {
     font: inherit; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px;
     border: 1px solid var(--muted); background: var(--bg); color: var(--ink); cursor: pointer;
@@ -113,6 +114,7 @@
       <input type="range" id="ell" min="0.4" max="3" step="0.01">
       <span id="ellOut"></span>
     </label>
+    <span data-control="spent" id="spent" class="spent"></span>
   </div>
   <div class="chart-wrap" id="wrap">
     <svg id="chart" role="img" aria-label="Gaussian process prediction of translation quality against training set size"></svg>
@@ -138,6 +140,7 @@
   Data: real measurements of a translation model trained on Indonesian→English sentence pairs
   (<a href="https://github.com/vschram/ZeroShot_for_PSL">source</a>).
   Prior: expected 50 at 10k pairs and 56 at 100k, ± 5 (one standard deviation).
+  Cost: assumed to grow in proportion to the number of sentence pairs, so ten times more data costs ten times more.
 </footer>
 
 <script>
@@ -156,6 +159,9 @@
   const priorMean = x => 50 + 6 * (x - 4);
   const lg = n => Math.log10(n);
   const fmtSize = n => n >= 1e6 ? (n / 1e6) + "M" : n >= 1e3 ? (n / 1e3) + "k" : String(n);
+  // Cost of an experiment, relative to the 10k run we already have (assumed proportional to the pairs).
+  const cost = n => n / 1e4;
+  const fmtCost = v => String(+v.toFixed(2));
   const fmtX = x => {
     const n = Math.pow(10, x);
     if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
@@ -173,6 +179,7 @@
     preset: null,
     tab: null,
     whatIf: null,        // Quiz 2: the "what if the 10k run had scored this?" value
+    spent: 0,            // tab 6: cost of the experiments run so far, relative to the 10k run
   };
 
   // ---------- Gaussian process ----------
@@ -218,7 +225,7 @@
   // experiment (double-click removes one); drag: the red "what if" point can be dragged; table: show predictions.
   const TABS = [
     { id: "motivation",   preset: "decision", label: "1 Motivation",   controls: [], noHover: true,
-      task: "One run with 10k sentence pairs scored 53.4. How good would the model be with 100k pairs, and how sure can we be?" },
+      task: "One run with 10k sentence pairs scored 53.4. Ten times more data costs ten times more: how good would the model be with 100k pairs, and how sure can we be?" },
     { id: "prior",        preset: "prior",    label: "2 Prior",        controls: [],
       task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
     { id: "kernel",       preset: "kernel",   label: "3 Kernel",       controls: ["ell"],
@@ -227,8 +234,8 @@
       task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its standard deviation, then check in the next tab." },
     { id: "posterior",    preset: "reveal",   label: "5 Posterior",    controls: ["showPrior", "showReal"], table: true,
       task: "Our updated belief about the score at 100k: 58.7 ± 3. The real run scored 57.7. Hover anywhere to see the rule at work." },
-    { id: "experiment",   preset: "band",     label: "6 Next experiment", controls: ["reset", "showReal", "ell"], click: true, table: true,
-      task: "The band is widest where we know least. Click where it is widest to run that experiment, and watch the band shrink." },
+    { id: "experiment",   preset: "band",     label: "6 Next experiment", controls: ["reset", "showReal", "ell", "spent"], click: true, table: true,
+      task: "The band is widest where we know least. Click where it is widest to run that experiment, and watch the band shrink. Bigger experiments cost more: hover to see the price." },
     { id: "quiz1",        preset: "quiz1",    label: "Quiz 1",         controls: [], table: true,
       task: "Measurements at 1k and 10k: where is the prediction least certain? Hover to compare 5k with 1M." },
     { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         controls: ["reset"], drag: true, table: true,
@@ -238,7 +245,9 @@
   function applyTab(id) {
     const t = TABS.find(t => t.id === id) || TABS[0];
     state.tab = t.id;
+    state.spent = 0;
     if (!shot) {
+      showSpent();
       document.getElementById("task").textContent = t.task;
       document.querySelectorAll("[data-control]").forEach(c => { c.hidden = !t.controls.includes(c.dataset.control); });
       document.getElementById("controls").hidden = !t.controls.length;
@@ -412,6 +421,14 @@
       label(sx(4) - 22, sy(53.36) - 26, ["10k pairs: 53.4"], { anchor: "end", bold: true });
       text(sx(5), sy(56) + FS * 0.35, "?", { "text-anchor": "middle", "font-size": FS * 2.4, "font-weight": 700, fill: "var(--mean)" });
       label(sx(5), sy(56) + FS * 2.6, ["100k pairs?"], { anchor: "middle" });
+      // More data costs more: training cost relative to the 10k run, at each tenfold step.
+      const yRow = sy(Y_MIN) - FS * 0.8;
+      label(M.l + 8, yRow - FS * 1.5, ["Training cost, relative to our 10k run:"], { fill: "var(--muted)" });
+      for (let x = X_MIN; x <= X_MAX; x++) {
+        const anchor = x === X_MIN ? "start" : x === X_MAX ? "end" : "middle";
+        const dx = x === X_MIN ? 8 : x === X_MAX ? -8 : 0;
+        label(sx(x) + dx, yRow, [`×${fmtCost(cost(10 ** x))}`], { anchor, bold: x === 5 });
+      }
     },
     prior() {
       for (const x of [4, 5]) {
@@ -525,6 +542,11 @@
   let drag = null, moved = false;
 
   const kernelView = () => !!PRESETS[state.preset]?.kernelOnly;
+  const nearestReal = x => REAL.reduce((best, r) => Math.abs(lg(r[0]) - x) < Math.abs(lg(best[0]) - x) ? r : best);
+  const showSpent = () => {
+    document.getElementById("spent").textContent = state.spent
+      ? `Spent on new experiments: ×${fmtCost(state.spent)} the 10k run` : "Spent on new experiments: nothing yet";
+  };
   // 100 and 1M sit on the plot's edges, so accept the pointer a little outside them and clamp.
   const inPlot = (px, py) => px >= M.l - 10 && px <= M.l + PW + M.r && py >= M.t && py <= M.t + PH;
   const clampX = px => Math.min(X_MAX, Math.max(X_MIN, ix(px)));
@@ -543,6 +565,10 @@
       const m = state.meas[0], s = sim(x, m.x, state.ell), surprise = m.y - priorMean(m.x);
       html += `<br><span class="rule">${priorMean(x).toFixed(1)} + ${s.toFixed(2)} × (${surprise >= 0 ? "+" : ""}${surprise.toFixed(1)}) = ${p.mean.toFixed(1)}`
             + `<br>± 5 × √(1 − ${s.toFixed(2)}²) = ± ${p.sd.toFixed(1)}</span>`;
+    }
+    if (tab().click) {
+      const [n] = nearestReal(x);
+      html += `<br><span class="rule">Run an experiment at ${fmtSize(n)}: costs ×${fmtCost(cost(n))} the 10k run</span>`;
     }
     tip.innerHTML = html;
     tip.style.display = "block";
@@ -571,9 +597,11 @@
       const [px, py] = toSvg(e);
       if (!inPlot(px, py)) return;
       const x = clampX(px);
-      const [n, y] = REAL.reduce((best, r) => Math.abs(lg(r[0]) - x) < Math.abs(lg(best[0]) - x) ? r : best);
+      const [n, y] = nearestReal(x);
       if (state.meas.some(m => Math.abs(m.x - lg(n)) < 1e-9)) return;
       state.meas.push({ x: lg(n), y });
+      state.spent += cost(n);
+      showSpent();
       state.preset = null;
       render();
       hover(e);
