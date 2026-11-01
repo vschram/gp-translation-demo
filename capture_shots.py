@@ -4,6 +4,7 @@ Serve this folder first (python -m http.server 8322), then run:
     python capture_shots.py
 """
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -18,17 +19,18 @@ PRESETS = ["decision", "prior", "kernel", "rule", "reveal", "band", "quiz1", "qu
 def capture(url, target, width, height, scale=1):
     if os.path.exists(target):
         os.remove(target)
-    with tempfile.TemporaryDirectory() as profile:
-        subprocess.run([
-            EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-            f"--force-device-scale-factor={scale}", f"--user-data-dir={profile}",
-            f"--window-size={width},{height}", f"--screenshot={target}", url,
-        ], check=False)
-        for _ in range(60):
-            if os.path.exists(target) and os.path.getsize(target) > 0:
-                break
-            time.sleep(0.5)
-        time.sleep(1)  # let Edge release the profile before cleanup
+    profile = tempfile.mkdtemp()
+    subprocess.run([
+        EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+        f"--force-device-scale-factor={scale}", f"--user-data-dir={profile}",
+        f"--window-size={width},{height}", f"--screenshot={target}", url,
+    ], check=False)
+    for _ in range(60):
+        if os.path.exists(target) and os.path.getsize(target) > 0:
+            break
+        time.sleep(0.5)
+    time.sleep(1)  # let Edge release the profile before cleanup
+    shutil.rmtree(profile, ignore_errors=True)  # Edge can still hold a file; a leftover temp folder is harmless
     return "ok" if os.path.exists(target) else "MISSING"
 
 
