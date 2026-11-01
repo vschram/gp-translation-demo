@@ -216,7 +216,7 @@
   // Each tab shows only the controls its task needs. click: clicking the chart runs an
   // experiment (double-click removes one); drag: measurements can be dragged; table: show predictions.
   const TABS = [
-    { id: "motivation",   preset: "decision", label: "1 Motivation",   controls: [],
+    { id: "motivation",   preset: "decision", label: "1 Motivation",   controls: [], noHover: true,
       task: "One run with 10k sentence pairs scored 53.4. How good would the model be with 100k pairs, and how sure can we be?" },
     { id: "prior",        preset: "prior",    label: "2 Prior",        controls: [],
       task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
@@ -524,7 +524,7 @@
     const [px, py] = toSvg(e);
     const x = ix(px);
     svg.querySelector("#cross")?.remove();
-    if (x < X_MIN || x > X_MAX || py < M.t || py > M.t + PH) { tip.style.display = "none"; return; }
+    if (tab().noHover || x < X_MIN || x > X_MAX || py < M.t || py > M.t + PH) { tip.style.display = "none"; return; }
     const line = el("line", { id: "cross", x1: sx(x), x2: sx(x), y1: M.t, y2: M.t + PH, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "2 3" });
     line.style.pointerEvents = "none";
     const p = f(x);
