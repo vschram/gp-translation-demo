@@ -96,7 +96,7 @@
   footer a { color: inherit; }
   /* screenshot mode: plot only */
   body.shot header, body.shot .tabs, body.shot .task, body.shot .controls, body.shot .readout, body.shot footer { display: none; }
-  body.shot main { max-width: none; padding: 0; }
+  body.shot main { display: block; max-width: none; padding: 0; }   /* screenshots: chart only, full width */
 
   /* Side-by-side preview: chart left, task + controls + cards right. */
   main { max-width: 1320px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0 24px; align-items: start; }
@@ -425,7 +425,7 @@
     const items = [];
     if (state.meas.length) items.push(["point", "Measurement"]);
     if (state.showPost && state.meas.length) items.push(["line", "Prediction ± 1 sd"]);
-    if (state.showPrior) items.push(["dash", narrow ? "Prior" : "Prior (before measuring)"]);
+    if (state.showPrior) items.push(["dash", "Prior ± 1 sd"]);
     if (state.showReal) items.push(["real", "Real curve"]);
     let x = M.l + 12 * k;
     const y = M.t + 18 * k;
