@@ -77,8 +77,7 @@
   .controls label { font-size: 0.9rem; display: inline-flex; gap: 6px; align-items: center; }
   .chart-wrap { position: relative; background: var(--bg); touch-action: none; }
   svg { display: block; width: 100%; height: auto; user-select: none; }
-  /* Keep the whole chart on screen: its width follows the window height (--ar = width / height). */
-  body:not(.shot) svg { width: min(100%, max(320px, calc((100vh - 330px) * var(--ar, 1.78)))); margin: 0 auto; }
+  body:not(.shot) svg { margin: 0 auto; }   /* width set by fitChart() */
   .tooltip {
     position: absolute; pointer-events: none; background: var(--panel); color: var(--ink);
     border: 1px solid var(--grid); border-radius: 6px; padding: 6px 10px; font-size: 0.85rem;
@@ -255,6 +254,7 @@
       document.getElementById("controls").hidden = !t.controls.length;
       document.getElementById("predCard").hidden = !t.table;
       svg.style.cursor = t.click ? "crosshair" : "";
+      fitChart();   // the task line and control row change height between tabs
       const url = new URL(location.href);
       url.searchParams.set("tab", t.id);
       history.replaceState(null, "", url);
@@ -289,7 +289,16 @@
   const XLABEL = (narrow || shot) ? "Training sentence pairs (log scale)" : "Training sentence pairs (log scale: each step is ten times more data)";
   const svg = document.getElementById("chart");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.style.setProperty("--ar", W / H);
+  // Size the chart to the space left below the controls, so it fits on screen without scrolling,
+  // but never smaller than a readable minimum (on small screens the page scrolls instead).
+  function fitChart() {
+    if (shot) return;
+    const wrapEl = document.getElementById("wrap");
+    const below = window.innerHeight - wrapEl.offsetTop - 16;
+    const full = wrapEl.clientWidth;
+    svg.style.width = Math.min(full, Math.max(Math.min(full, 600), below * W / H)) + "px";
+  }
+  window.addEventListener("resize", fitChart);
   const PW = W - M.l - M.r, PH = H - M.t - M.b;
   const sx = x => M.l + (x - X_MIN) / (X_MAX - X_MIN) * PW;
   const sy = y => M.t + (Y_MAX - y) / (Y_MAX - Y_MIN) * PH;
