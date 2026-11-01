@@ -67,6 +67,7 @@
   .tabs .after { color: var(--muted); font-size: 0.8rem; align-self: center; margin-left: 6px; }
   .task { margin: 0 0 12px; padding: 8px 12px; background: var(--panel); border-left: 4px solid var(--sky); border-radius: 4px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
+  [hidden] { display: none !important; }
   .controls button {
     font: inherit; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px;
     border: 1px solid var(--muted); background: var(--bg); color: var(--ink); cursor: pointer;
@@ -105,10 +106,10 @@
   <div class="tabs" role="tablist" id="tabs" aria-label="Steps of the lesson"></div>
   <p class="task" id="task"></p>
   <div class="controls" id="controls">
-    <button id="reset">Clear measurements</button>
-    <label><input type="checkbox" id="showReal"> Show real curve</label>
-    <label><input type="checkbox" id="showPrior" checked> Show prior</label>
-    <label>Similarity reach
+    <button id="reset" data-control="reset">Clear measurements</button>
+    <label data-control="showReal"><input type="checkbox" id="showReal"> Show real curve</label>
+    <label data-control="showPrior"><input type="checkbox" id="showPrior" checked> Show prior</label>
+    <label data-control="ell">Similarity reach
       <input type="range" id="ell" min="0.4" max="3" step="0.01">
       <span id="ellOut"></span>
     </label>
@@ -118,7 +119,7 @@
     <div class="tooltip" id="tip"></div>
   </div>
   <div class="readout">
-    <div class="card">
+    <div class="card" id="predCard">
       <h2>Predictions</h2>
       <table id="table"></table>
     </div>
@@ -126,10 +127,9 @@
       <h2>Try it</h2>
       <ul>
         <li>Each tab reproduces one step of the lesson. Work through them in order, then experiment.</li>
-        <li>Click the chart to run an experiment at that dataset size: the real measured score appears. Try one where the band is widest, and watch it shrink.</li>
         <li>Hover to see the prediction at any size. With one measurement, the tooltip shows the rule: expected + similarity × surprise.</li>
-        <li>Double-click a measurement to remove it.</li>
-        <li>After the quiz: drag a measurement up or down to ask "what if it had scored this?"</li>
+        <li>In tab 6, click the chart to run an experiment at that dataset size: the real measured score appears. Double-click a measurement to remove it.</li>
+        <li>In Quiz 2, drag a measurement up or down to ask "what if it had scored this?"</li>
       </ul>
     </div>
   </div>
@@ -213,21 +213,36 @@
     quiz2:    { meas: [4], showPrior: false, showPost: true, whatIf: 45, notes: ["twoPredictions"] },
   };
   // ---------- tabs: one per step of the lesson; ?tab=<id> opens one directly ----------
+  // Each tab shows only the controls its task needs. click: clicking the chart runs an
+  // experiment (double-click removes one); drag: measurements can be dragged; table: show predictions.
   const TABS = [
-    { id: "motivation",   preset: "decision", label: "1 Motivation",   task: "One run with 10k sentence pairs scored 53.4. How good would the model be with 100k pairs, and how sure can we be?" },
-    { id: "prior",        preset: "prior",    label: "2 Prior",        task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
-    { id: "kernel",       preset: "kernel",   label: "3 Kernel",       task: "Similarity to the 10k run falls as dataset sizes move apart. Move the similarity slider and watch how far it reaches." },
-    { id: "conditioning", preset: "rule",     label: "4 Conditioning", task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its standard deviation, then check in the next tab." },
-    { id: "posterior",    preset: "reveal",   label: "5 Posterior",    task: "Our updated belief about the score at 100k: 58.7 ± 3. The real run scored 57.7. Hover anywhere to see the rule at work." },
-    { id: "experiment",   preset: "band",     label: "6 Next experiment", task: "The band is widest where we know least. Click where it is widest to run that experiment, and watch the band shrink." },
-    { id: "quiz1",        preset: "quiz1",    label: "Quiz 1",         task: "Measurements at 1k and 10k: where is the prediction least certain? Hover to compare 5k with 1M." },
-    { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         task: "If the 10k run had scored 45 (red), the prediction moves but the ± 3 stays. Drag the 10k measurement to try other scores." },
+    { id: "motivation",   preset: "decision", label: "1 Motivation",   controls: [],
+      task: "One run with 10k sentence pairs scored 53.4. How good would the model be with 100k pairs, and how sure can we be?" },
+    { id: "prior",        preset: "prior",    label: "2 Prior",        controls: [],
+      task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
+    { id: "kernel",       preset: "kernel",   label: "3 Kernel",       controls: ["ell"],
+      task: "Similarity to the 10k run falls as dataset sizes move apart. Move the similarity slider and watch how far it reaches." },
+    { id: "conditioning", preset: "rule",     label: "4 Conditioning", controls: [],
+      task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its standard deviation, then check in the next tab." },
+    { id: "posterior",    preset: "reveal",   label: "5 Posterior",    controls: ["showPrior", "showReal"], table: true,
+      task: "Our updated belief about the score at 100k: 58.7 ± 3. The real run scored 57.7. Hover anywhere to see the rule at work." },
+    { id: "experiment",   preset: "band",     label: "6 Next experiment", controls: ["reset", "showReal", "ell"], click: true, table: true,
+      task: "The band is widest where we know least. Click where it is widest to run that experiment, and watch the band shrink." },
+    { id: "quiz1",        preset: "quiz1",    label: "Quiz 1",         controls: [], table: true,
+      task: "Measurements at 1k and 10k: where is the prediction least certain? Hover to compare 5k with 1M." },
+    { id: "quiz2",        preset: "quiz2",    label: "Quiz 2",         controls: [], drag: true, table: true,
+      task: "If the 10k run had scored 45 (red), the prediction moves but the ± 3 stays. Drag the 10k measurement to try other scores." },
   ];
+  const tab = () => TABS.find(t => t.id === state.tab) || {};
   function applyTab(id) {
     const t = TABS.find(t => t.id === id) || TABS[0];
     state.tab = t.id;
     if (!shot) {
       document.getElementById("task").textContent = t.task;
+      document.querySelectorAll("[data-control]").forEach(c => { c.hidden = !t.controls.includes(c.dataset.control); });
+      document.getElementById("controls").hidden = !t.controls.length;
+      document.getElementById("predCard").hidden = !t.table;
+      svg.style.cursor = t.click ? "crosshair" : "";
       const url = new URL(location.href);
       url.searchParams.set("tab", t.id);
       history.replaceState(null, "", url);
@@ -360,7 +375,7 @@
       const c = el("circle", {
         cx: sx(m.x), cy: sy(m.y), r: shot ? 13 : 8,
         fill: edited ? "var(--bg)" : "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": shot ? 4 : 2.5,
-        style: shot ? "" : "cursor: ns-resize",
+        style: !shot && tab().drag ? "cursor: ns-resize" : "",
       });
       c.dataset.idx = i;
     });
@@ -532,7 +547,7 @@
   if (!shot) {
     svg.addEventListener("pointerdown", e => {
       const idx = e.target.dataset?.idx;
-      if (idx != null) { drag = +idx; moved = false; svg.setPointerCapture(e.pointerId); }
+      if (idx != null && tab().drag) { drag = +idx; moved = false; svg.setPointerCapture(e.pointerId); }
     });
     svg.addEventListener("pointermove", e => {
       if (drag != null) {
@@ -546,7 +561,7 @@
     });
     svg.addEventListener("pointerup", e => {
       if (drag != null) { drag = null; return; }
-      if (kernelView()) return;   // the similarity plot has no measurements to add
+      if (!tab().click) return;   // only tab 6 runs experiments
       const [px, py] = toSvg(e);
       if (px < M.l || px > M.l + PW || py < M.t || py > M.t + PH) return;
       const x = ix(px);
@@ -559,7 +574,7 @@
     });
     svg.addEventListener("dblclick", e => {
       const idx = e.target.dataset?.idx;
-      if (idx == null) return;
+      if (idx == null || !tab().click) return;
       state.meas.splice(+idx, 1);
       render();
     });
