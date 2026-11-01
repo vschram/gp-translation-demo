@@ -224,7 +224,7 @@
   // Each tab shows only the controls its task needs. click: clicking the chart runs an
   // experiment (double-click removes one); drag: the red "what if" point can be dragged; table: show predictions.
   const TABS = [
-    { id: "motivation",   preset: "decision", label: "1 Motivation",   controls: [], noHover: true,
+    { id: "motivation",   preset: "decision", label: "1 Motivation",   controls: [], hoverCost: true,
       task: "One run with 10k sentence pairs scored 53.4. Ten times more data costs ten times more: how good would the model be with 100k pairs, and how sure can we be?" },
     { id: "prior",        preset: "prior",    label: "2 Prior",        controls: [],
       task: "Before measuring: a trend line with a ±5 band. Hover to read the expected score at any size." },
@@ -554,12 +554,14 @@
     const [px, py] = toSvg(e);
     const x = clampX(px);
     svg.querySelector("#cross")?.remove();
-    if (tab().noHover || !inPlot(px, py)) { tip.style.display = "none"; return; }
+    if (!inPlot(px, py)) { tip.style.display = "none"; return; }
     const line = el("line", { id: "cross", x1: sx(x), x2: sx(x), y1: M.t, y2: M.t + PH, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "2 3" });
     line.style.pointerEvents = "none";
     const p = f(x);
     let html = `<b>${fmtX(x)} pairs</b>: prediction ${p.mean.toFixed(1)} ± ${p.sd.toFixed(1)}`;
-    if (kernelView()) html = `<b>${fmtX(x)} pairs</b>: similarity to 10k = ${sim(x, 4, state.ell).toFixed(2)}`;
+    // Tab 1 shows only the cost: the expected value belongs to the prior in tab 2.
+    if (tab().hoverCost) html = `<b>${fmtX(x)} pairs</b>: training cost ×${+cost(10 ** x).toPrecision(2)} the 10k run`;
+    else if (kernelView()) html = `<b>${fmtX(x)} pairs</b>: similarity to 10k = ${sim(x, 4, state.ell).toFixed(2)}`;
     else if (!state.showPost) html = `<b>${fmtX(x)} pairs</b>: expected ${priorMean(x).toFixed(1)} ± ${SIGMA}`;
     else if (state.meas.length === 1) {
       const m = state.meas[0], s = sim(x, m.x, state.ell), surprise = m.y - priorMean(m.x);
