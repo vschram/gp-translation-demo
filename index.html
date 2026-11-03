@@ -243,7 +243,7 @@
     { id: "kernel",       preset: "kernel",   label: "3 Kernel",       controls: ["ell"],
       task: "Similarity to the 10k run falls as dataset sizes move apart. Move the slider to change the similarity between 10k and 100k, and watch the whole curve follow." },
     { id: "conditioning", preset: "rule",     label: "4 Conditioning", controls: [],
-      task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its standard deviation, then check in the next tab." },
+      task: "Use the rule: prediction = expected + similarity × surprise. Predict the score at 100k and its uncertainty, then check in the next tab." },
     { id: "posterior",    preset: "reveal",   label: "5 Posterior",    controls: ["showPrior", "showReal"], table: true,
       task: "Our updated belief about the score at 100k: 58.7 ± 3. The real run scored 57.7. Hover anywhere to see the rule at work." },
     { id: "experiment",   preset: "band",     label: "6 Uncertainty band", controls: ["reset", "showReal", "ell", "spent"], click: true, table: true,
