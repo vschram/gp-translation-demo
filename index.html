@@ -541,11 +541,10 @@
     const yl = text(0, 0, "Similarity to 10k pairs", { "text-anchor": "middle", fill: "var(--muted)" });
     yl.setAttribute("transform", `translate(${FS * 1.0},${M.t + PH / 2}) rotate(-90)`);
     const s = x => sim(x, 4, state.ell);
-    el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L") + `L${sx(X_MAX)},${ky(0)}L${sx(X_MIN)},${ky(0)}Z`, fill: "var(--band)" });
     el("path", { d: "M" + GRID.map(x => `${sx(x).toFixed(1)},${ky(s(x)).toFixed(1)}`).join("L"), fill: "none", stroke: "var(--mean)", "stroke-width": 4 * k });
     el("circle", { cx: sx(4), cy: ky(1), r: 13 * k, fill: "var(--yellow)", stroke: "var(--point-stroke)", "stroke-width": 4 * k });
-    label(sx(4), ky(1) - 26 * k, ["10k: 1.00 (itself)"], { anchor: "middle", bold: true });
-    for (const [x, name, dx, dy, anchor] of [[lg(20000), "20k", 22 * k, FS * 1.4, "start"], [5, "100k", 22 * k, -16 * k, "start"], [6, "1M", -16 * k, FS * 1.4, "end"]]) {
+    label(sx(4) + 10 * k, ky(1) - 26 * k, ["10k: 1.00 (itself)"], { anchor: "end", bold: true });
+    for (const [x, name, dx, dy, anchor] of [[lg(20000), "20k", 18 * k, -14 * k, "start"], [5, "100k", 22 * k, -16 * k, "start"], [6, "1M", -16 * k, FS * 1.4, "end"]]) {
       el("circle", { cx: sx(x), cy: ky(s(x)), r: 9 * k, fill: "var(--mean)" });
       label(sx(x) + dx, ky(s(x)) + dy, [`${name}: ${s(x).toFixed(2)}`], { anchor, bold: name === "100k" });
     }
